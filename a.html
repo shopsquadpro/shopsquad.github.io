@@ -3,22 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analytics Dashboard</title>
+    <title>Analytics</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             padding: 20px;
             background: #f5f5f5;
         }
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-        h1 {
-            color: #333;
-            margin-bottom: 20px;
-        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1 { color: #333; margin-bottom: 20px; }
+        
         .config {
             background: #fff3cd;
             padding: 15px;
@@ -32,22 +27,15 @@
             cursor: pointer;
             user-select: none;
         }
-        .config-header:hover {
-            opacity: 0.8;
-        }
         .toggle-arrow {
-            display: inline-block;
             margin-right: 8px;
-            transition: transform 0.3s ease;
-            font-size: 16px;
+            transition: transform 0.3s;
         }
-        .toggle-arrow.collapsed {
-            transform: rotate(-90deg);
-        }
+        .toggle-arrow.collapsed { transform: rotate(-90deg); }
         .config-content {
             margin-top: 15px;
             overflow: hidden;
-            transition: max-height 0.3s ease, opacity 0.3s ease;
+            transition: max-height 0.3s, opacity 0.3s;
         }
         .config-content.hidden {
             max-height: 0;
@@ -71,6 +59,7 @@
             border-radius: 4px;
             cursor: pointer;
         }
+        
         .controls {
             background: white;
             padding: 20px;
@@ -78,28 +67,28 @@
             margin-bottom: 20px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
-        select, button {
+        button {
             padding: 10px 15px;
             font-size: 14px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            margin-right: 10px;
-        }
-        button {
             background: #007AFF;
             color: white;
             border: none;
+            border-radius: 4px;
             cursor: pointer;
         }
         button:hover { background: #0056CC; }
-        button:disabled {
-            background: #ccc;
-            cursor: not-allowed;
+        .export-btn {
+            margin-bottom: 10px;
+            font-size: 12px;
+            padding: 6px 12px;
         }
-        .loading {
-            text-align: center;
-            padding: 40px;
-            color: #666;
+        
+        .result-section { margin-bottom: 30px; }
+        .result-section h2 {
+            color: #333;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #007AFF;
         }
         .results {
             background: white;
@@ -108,6 +97,7 @@
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             overflow-x: auto;
         }
+        
         table {
             width: 100%;
             border-collapse: collapse;
@@ -120,16 +110,30 @@
         th {
             background: #f9f9f9;
             font-weight: 600;
-            color: #333;
         }
         tr:hover { background: #f9f9f9; }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
         .error {
             background: #fee;
             color: #c33;
             padding: 15px;
             border-radius: 4px;
-            margin-top: 20px;
         }
+        .status {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            margin-left: 10px;
+        }
+        .status.loading { background: #fff3cd; color: #856404; }
+        .status.success { background: #d4edda; color: #155724; }
+        .status.error { background: #f8d7da; color: #721c24; }
     </style>
 </head>
 <body>
@@ -148,7 +152,7 @@
                 </label><br>
                 <label>
                     Supabase Anon Key:
-                    <input type="password" id="anonKey" placeholder="Your Supabase anon key (safe for read-only)" />
+                    <input type="password" id="anonKey" placeholder="Your Supabase anon key" />
                 </label><br>
                 <label>
                     Admin Password (optional):
@@ -159,208 +163,215 @@
         </div>
         
         <div class="controls">
-            <label for="querySelect">Query: </label>
-            <select id="querySelect">
-                <option value="users">Users by Platform & Country</option>
-                <option value="data_inventory">Data Inventory</option>
-            </select>
-            <button onclick="loadData()">Load Data</button>
-            <button onclick="exportData()" id="exportBtn" disabled>Export CSV</button>
+            <button onclick="loadAll()">Load All Analytics</button>
         </div>
 
         <div id="results"></div>
     </div>
 
     <script>
-        // Load saved configuration
-        const savedUrl = localStorage.getItem('analyticsFunctionUrl');
-        const savedKey = localStorage.getItem('analyticsAnonKey');
-        const savedPassword = localStorage.getItem('analyticsAdminPassword');
-        
-        if (savedUrl) {
-            document.getElementById('functionUrl').value = savedUrl;
+        // ============================================================================
+        // CONFIGURATION - All queries and settings in one place
+        // ============================================================================
+        const CONFIG = {
+            QUERIES: {
+                users_per_country: 'Users per Country (Grouped)',
+                users_plain: 'Users (Detailed List)',
+                recipes: 'Recipes',
+                ai_responses: 'AI Chat Responses'
+            },
+            STORAGE_KEYS: {
+                url: 'analyticsFunctionUrl',
+                key: 'analyticsAnonKey',
+                password: 'analyticsAdminPassword',
+                expanded: 'configExpanded'
+            }
+        };
+
+        let allData = {};
+
+        // ============================================================================
+        // CONFIGURATION MANAGEMENT
+        // ============================================================================
+        function loadSavedConfig() {
+            document.getElementById('functionUrl').value = localStorage.getItem(CONFIG.STORAGE_KEYS.url) || '';
+            document.getElementById('anonKey').value = localStorage.getItem(CONFIG.STORAGE_KEYS.key) || '';
+            document.getElementById('adminPassword').value = localStorage.getItem(CONFIG.STORAGE_KEYS.password) || '';
+            
+            const expanded = localStorage.getItem(CONFIG.STORAGE_KEYS.expanded);
+            if (expanded === 'false') {
+                document.getElementById('configContent').classList.add('hidden');
+                document.getElementById('configArrow').classList.add('collapsed');
+            }
         }
-        if (savedKey) {
-            document.getElementById('anonKey').value = savedKey;
-        }
-        if (savedPassword) {
-            document.getElementById('adminPassword').value = savedPassword;
+
+        function saveConfig() {
+            localStorage.setItem(CONFIG.STORAGE_KEYS.url, document.getElementById('functionUrl').value);
+            localStorage.setItem(CONFIG.STORAGE_KEYS.key, document.getElementById('anonKey').value);
+            const password = document.getElementById('adminPassword').value;
+            if (password) {
+                localStorage.setItem(CONFIG.STORAGE_KEYS.password, password);
+            } else {
+                localStorage.removeItem(CONFIG.STORAGE_KEYS.password);
+            }
+            alert('Configuration saved!');
         }
 
         function toggleConfig() {
             const content = document.getElementById('configContent');
             const arrow = document.getElementById('configArrow');
-            const isCollapsed = content.classList.contains('hidden');
+            const isHidden = content.classList.contains('hidden');
             
-            if (isCollapsed) {
-                content.classList.remove('hidden');
-                arrow.classList.remove('collapsed');
-                localStorage.setItem('configExpanded', 'true');
-            } else {
-                content.classList.add('hidden');
-                arrow.classList.add('collapsed');
-                localStorage.setItem('configExpanded', 'false');
-            }
+            content.classList.toggle('hidden', !isHidden);
+            arrow.classList.toggle('collapsed', isHidden);
+            localStorage.setItem(CONFIG.STORAGE_KEYS.expanded, isHidden ? 'true' : 'false');
         }
 
-        function saveConfig() {
-            const url = document.getElementById('functionUrl').value;
-            const key = document.getElementById('anonKey').value;
-            const password = document.getElementById('adminPassword').value;
-            
-            if (url) {
-                localStorage.setItem('analyticsFunctionUrl', url);
-            }
-            if (key) {
-                localStorage.setItem('analyticsAnonKey', key);
-            }
-            if (password) {
-                localStorage.setItem('analyticsAdminPassword', password);
-            } else {
-                localStorage.removeItem('analyticsAdminPassword');
-            }
-            
-            alert('Configuration saved!');
+        function getConfig() {
+            const url = document.getElementById('functionUrl').value || localStorage.getItem(CONFIG.STORAGE_KEYS.url);
+            const key = document.getElementById('anonKey').value || localStorage.getItem(CONFIG.STORAGE_KEYS.key);
+            const password = document.getElementById('adminPassword').value || localStorage.getItem(CONFIG.STORAGE_KEYS.password) || '';
+            return { url, key, password };
         }
 
-        function getApiUrl() {
-            return document.getElementById('functionUrl').value || localStorage.getItem('analyticsFunctionUrl');
-        }
-
-        function getAnonKey() {
-            return document.getElementById('anonKey').value || localStorage.getItem('analyticsAnonKey');
-        }
-
-        function getAdminPassword() {
-            return document.getElementById('adminPassword').value || localStorage.getItem('analyticsAdminPassword') || '';
-        }
-
-        let currentData = null;
-
-        async function loadData() {
-            const query = document.getElementById('querySelect').value;
-            const apiUrl = getApiUrl();
-            const anonKey = getAnonKey();
-            const adminPassword = getAdminPassword();
-            const resultsDiv = document.getElementById('results');
-            
-            if (!apiUrl) {
-                resultsDiv.innerHTML = '<div class="error">Please configure the Function URL first.</div>';
+        // ============================================================================
+        // DATA LOADING
+        // ============================================================================
+        async function loadAll() {
+            const config = getConfig();
+            if (!config.url || !config.key) {
+                document.getElementById('results').innerHTML = 
+                    '<div class="error">Please configure Function URL and Anon Key first.</div>';
                 return;
             }
-            
-            if (!anonKey) {
-                resultsDiv.innerHTML = '<div class="error">Please configure the Anon Key first.</div>';
-                return;
-            }
-            
-            resultsDiv.innerHTML = '<div class="loading">Loading...</div>';
 
+            // Initialize UI
+            const html = Object.keys(CONFIG.QUERIES).map(queryKey => `
+                <div class="result-section" id="section-${queryKey}">
+                    <h2>${CONFIG.QUERIES[queryKey]} <span class="status loading" id="status-${queryKey}">Loading...</span></h2>
+                    <div id="content-${queryKey}"><div class="loading">Loading...</div></div>
+                </div>
+            `).join('');
+            document.getElementById('results').innerHTML = html;
+
+            // Load all queries in parallel
+            const promises = Object.keys(CONFIG.QUERIES).map(queryKey => 
+                loadQuery(queryKey, config)
+            );
+            await Promise.all(promises);
+        }
+
+        async function loadQuery(queryKey, config) {
             try {
-                // Build URL with optional password
-                let requestUrl = apiUrl + '?query=' + query;
-                if (adminPassword) {
-                    requestUrl += '&password=' + encodeURIComponent(adminPassword);
-                }
+                const url = `${config.url}?query=${queryKey}` + 
+                    (config.password ? `&password=${encodeURIComponent(config.password)}` : '');
                 
                 const headers = {
-                    'Authorization': 'Bearer ' + anonKey,
-                    'apikey': anonKey
+                    'Authorization': `Bearer ${config.key}`,
+                    'apikey': config.key
                 };
-                
-                // Also send password in header as alternative
-                if (adminPassword) {
-                    headers['x-admin-password'] = adminPassword;
+                if (config.password) {
+                    headers['x-admin-password'] = config.password;
                 }
-                
-                const response = await fetch(requestUrl, { headers });
-                
+
+                const response = await fetch(url, { headers });
                 const json = await response.json();
 
                 if (!response.ok) {
                     throw new Error(json.error || 'Request failed');
                 }
 
-                currentData = json.data;
-                displayTable(json.data);
-                document.getElementById('exportBtn').disabled = false;
-
+                allData[queryKey] = json.data;
+                updateSection(queryKey, json.data, null);
             } catch (error) {
-                resultsDiv.innerHTML = '<div class="error">Error: ' + error.message + '</div>';
-                console.error(error);
+                updateSection(queryKey, null, error.message);
             }
         }
 
-        function displayTable(data) {
+        function updateSection(queryKey, data, error) {
+            const statusEl = document.getElementById(`status-${queryKey}`);
+            const contentEl = document.getElementById(`content-${queryKey}`);
+            
+            if (error) {
+                statusEl.textContent = 'Error';
+                statusEl.className = 'status error';
+                contentEl.innerHTML = `<div class="error">Error: ${error}</div>`;
+            } else {
+                statusEl.textContent = `Loaded (${data?.length || 0} rows)`;
+                statusEl.className = 'status success';
+                contentEl.innerHTML = renderTable(data, queryKey);
+            }
+        }
+
+        // ============================================================================
+        // RENDERING
+        // ============================================================================
+        function renderTable(data, queryKey) {
             if (!data || data.length === 0) {
-                document.getElementById('results').innerHTML = 
-                    '<div class="loading">No data found.</div>';
-                return;
+                return '<div class="loading">No data found.</div>';
             }
 
             const keys = Object.keys(data[0]);
-            let html = '<div class="results"><table><thead><tr>';
-            
-            keys.forEach(key => {
-                html += '<th>' + key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) + '</th>';
-            });
-            html += '</tr></thead><tbody>';
+            const formatValue = (value) => {
+                if (value === null || value === undefined) return '';
+                return Array.isArray(value) ? value.join(', ') : String(value);
+            };
 
-            data.forEach(row => {
-                html += '<tr>';
-                keys.forEach(key => {
-                    const value = row[key];
-                    html += '<td>' + (value !== null && value !== undefined ? value : '') + '</td>';
-                });
-                html += '</tr>';
-            });
+            const headers = keys.map(k => `<th>${k.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</th>`).join('');
+            const rows = data.map(row => 
+                `<tr>${keys.map(k => `<td>${formatValue(row[k])}</td>`).join('')}</tr>`
+            ).join('');
 
-            html += '</tbody></table></div>';
-            document.getElementById('results').innerHTML = html;
+            return `
+                <button class="export-btn" onclick="exportData('${queryKey}')">Export CSV</button>
+                <div class="results">
+                    <table>
+                        <thead><tr>${headers}</tr></thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                </div>
+            `;
         }
 
-        function exportData() {
-            if (!currentData || currentData.length === 0) return;
+        // ============================================================================
+        // EXPORT
+        // ============================================================================
+        function exportData(queryKey) {
+            const data = allData[queryKey];
+            if (!data || data.length === 0) return;
 
-            const keys = Object.keys(currentData[0]);
+            const keys = Object.keys(data[0]);
+            const formatValue = (value) => {
+                if (value === null || value === undefined) return '';
+                const str = Array.isArray(value) ? value.join(', ') : String(value);
+                if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+                    return `"${str.replace(/"/g, '""')}"`;
+                }
+                return str;
+            };
+
             const headers = keys.join(',');
-            const rows = currentData.map(row => 
-                keys.map(key => {
-                    const value = row[key];
-                    if (value === null || value === undefined) return '';
-                    const str = String(value);
-                    if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-                        return '"' + str.replace(/"/g, '""') + '"';
-                    }
-                    return str;
-                }).join(',')
-            );
-
+            const rows = data.map(row => keys.map(k => formatValue(row[k])).join(','));
             const csv = [headers, ...rows].join('\n');
+
             const blob = new Blob([csv], { type: 'text/csv' });
-            const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
-            a.href = url;
-            a.download = 'analytics-' + Date.now() + '.csv';
+            a.href = URL.createObjectURL(blob);
+            a.download = `${queryKey}-${Date.now()}.csv`;
             a.click();
-            URL.revokeObjectURL(url);
+            URL.revokeObjectURL(a.href);
         }
 
-        // Auto-load on page load if config is saved
+        // ============================================================================
+        // INITIALIZATION
+        // ============================================================================
         window.addEventListener('load', () => {
-            // Restore config collapsed state
-            const configExpanded = localStorage.getItem('configExpanded');
-            if (configExpanded === 'false') {
-                document.getElementById('configContent').classList.add('hidden');
-                document.getElementById('configArrow').classList.add('collapsed');
-            }
-            
-            // Auto-load data if config is saved
-            if (savedUrl && savedKey) {
-                loadData();
+            loadSavedConfig();
+            const config = getConfig();
+            if (config.url && config.key) {
+                loadAll();
             }
         });
     </script>
 </body>
 </html>
-

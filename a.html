@@ -26,6 +26,34 @@
             margin-bottom: 20px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
+        .config-header {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            user-select: none;
+        }
+        .config-header:hover {
+            opacity: 0.8;
+        }
+        .toggle-arrow {
+            display: inline-block;
+            margin-right: 8px;
+            transition: transform 0.3s ease;
+            font-size: 16px;
+        }
+        .toggle-arrow.collapsed {
+            transform: rotate(-90deg);
+        }
+        .config-content {
+            margin-top: 15px;
+            overflow: hidden;
+            transition: max-height 0.3s ease, opacity 0.3s ease;
+        }
+        .config-content.hidden {
+            max-height: 0;
+            opacity: 0;
+            margin-top: 0;
+        }
         .config input {
             padding: 8px;
             width: 100%;
@@ -109,20 +137,25 @@
         <h1>📊 Analytics Dashboard</h1>
         
         <div class="config">
-            <strong>Configuration:</strong><br>
-            <label>
-                Supabase Function URL:
-                <input type="text" id="functionUrl" placeholder="https://your-project.supabase.co/functions/v1/analytics" />
-            </label><br>
-            <label>
-                Supabase Anon Key:
-                <input type="password" id="anonKey" placeholder="Your Supabase anon key (safe for read-only)" />
-            </label><br>
-            <label>
-                Admin Password (optional):
-                <input type="password" id="adminPassword" placeholder="Leave empty if not configured" />
-            </label><br>
-            <button onclick="saveConfig()">Save Configuration</button>
+            <div class="config-header" onclick="toggleConfig()">
+                <span class="toggle-arrow" id="configArrow">▼</span>
+                <strong>Configuration</strong>
+            </div>
+            <div class="config-content" id="configContent">
+                <label>
+                    Supabase Function URL:
+                    <input type="text" id="functionUrl" placeholder="https://your-project.supabase.co/functions/v1/analytics" />
+                </label><br>
+                <label>
+                    Supabase Anon Key:
+                    <input type="password" id="anonKey" placeholder="Your Supabase anon key (safe for read-only)" />
+                </label><br>
+                <label>
+                    Admin Password (optional):
+                    <input type="password" id="adminPassword" placeholder="Leave empty if not configured" />
+                </label><br>
+                <button onclick="saveConfig()">Save Configuration</button>
+            </div>
         </div>
         
         <div class="controls">
@@ -152,6 +185,22 @@
         }
         if (savedPassword) {
             document.getElementById('adminPassword').value = savedPassword;
+        }
+
+        function toggleConfig() {
+            const content = document.getElementById('configContent');
+            const arrow = document.getElementById('configArrow');
+            const isCollapsed = content.classList.contains('hidden');
+            
+            if (isCollapsed) {
+                content.classList.remove('hidden');
+                arrow.classList.remove('collapsed');
+                localStorage.setItem('configExpanded', 'true');
+            } else {
+                content.classList.add('hidden');
+                arrow.classList.add('collapsed');
+                localStorage.setItem('configExpanded', 'false');
+            }
         }
 
         function saveConfig() {
@@ -299,6 +348,14 @@
 
         // Auto-load on page load if config is saved
         window.addEventListener('load', () => {
+            // Restore config collapsed state
+            const configExpanded = localStorage.getItem('configExpanded');
+            if (configExpanded === 'false') {
+                document.getElementById('configContent').classList.add('hidden');
+                document.getElementById('configArrow').classList.add('collapsed');
+            }
+            
+            // Auto-load data if config is saved
             if (savedUrl && savedKey) {
                 loadData();
             }

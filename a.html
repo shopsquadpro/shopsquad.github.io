@@ -102,10 +102,20 @@
             width: 100%;
             border-collapse: collapse;
         }
-        th, td {
+        th,         td {
             padding: 12px;
             text-align: left;
             border-bottom: 1px solid #eee;
+            max-width: 300px;
+            word-wrap: break-word;
+            position: relative;
+        }
+        td.truncated {
+            cursor: pointer;
+        }
+        td.full-text {
+            white-space: normal;
+            max-width: none;
         }
         th {
             background: #f9f9f9;
@@ -138,7 +148,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>📊 Analytics Dashboard</h1>
+        <h1>📊 Analytics</h1>
         
         <div class="config">
             <div class="config-header" onclick="toggleConfig()">
@@ -185,7 +195,8 @@
                 key: 'analyticsAnonKey',
                 password: 'analyticsAdminPassword',
                 expanded: 'configExpanded'
-            }
+            },
+            MAX_CELL_CHARS: 80  // Maximum characters to display in table cells before truncation
         };
 
         let allData = {};
@@ -312,15 +323,23 @@
             }
 
             const keys = Object.keys(data[0]);
-            const formatValue = (value) => {
-                if (value === null || value === undefined) return '';
-                return Array.isArray(value) ? value.join(', ') : String(value);
+            const formatValue = (value, maxChars) => {
+                if (value === null || value === undefined) return { text: '', full: '' };
+                const fullText = Array.isArray(value) ? value.join(', ') : String(value);
+                const text = fullText.length > maxChars ? fullText.substring(0, maxChars) + '...' : fullText;
+                return { text, full: fullText, isTruncated: fullText.length > maxChars };
             };
 
             const headers = keys.map(k => `<th>${k.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</th>`).join('');
-            const rows = data.map(row => 
-                `<tr>${keys.map(k => `<td>${formatValue(row[k])}</td>`).join('')}</tr>`
-            ).join('');
+            const rows = data.map((row, rowIndex) => {
+                const cells = keys.map((k, cellIndex) => {
+                    const { text, full, isTruncated } = formatValue(row[k], CONFIG.MAX_CELL_CHARS);
+                    const cellId = `cell-${queryKey}-${rowIndex}-${cellIndex}`;
+                    const className = isTruncated ? 'truncated' : '';
+                    return `<td class="${className}" id="${cellId}" title="${full.replace(/"/g, '&quot;')}" onclick="expandCell('${cellId}')">${text}</td>`;
+                }).join('');
+                return `<tr>${cells}</tr>`;
+            }).join('');
 
             return `
                 <button class="export-btn" onclick="exportData('${queryKey}')">Export CSV</button>
@@ -331,6 +350,20 @@
                     </table>
                 </div>
             `;
+        }
+
+        // ============================================================================
+        // CELL EXPANSION (for mobile)
+        // ============================================================================
+        function expandCell(cellId) {
+            const cell = document.getElementById(cellId);
+            if (!cell || !cell.classList.contains('truncated')) return;
+            
+            const fullText = cell.getAttribute('title');
+            cell.textContent = fullText;
+            cell.classList.remove('truncated');
+            cell.classList.add('full-text');
+            cell.removeAttribute('onclick');
         }
 
         // ============================================================================

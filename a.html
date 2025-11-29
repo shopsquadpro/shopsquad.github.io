@@ -77,10 +77,9 @@
             cursor: pointer;
         }
         button:hover { background: #0056CC; }
-        .export-btn {
-            margin-bottom: 10px;
-            font-size: 12px;
-            padding: 6px 12px;
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
         }
         
         .result-section { margin-bottom: 30px; }
@@ -152,12 +151,24 @@
         .status.loading { background: #fff3cd; color: #856404; }
         .status.success { background: #d4edda; color: #155724; }
         .status.error { background: #f8d7da; color: #721c24; }
-        .row-limit-notice {
-            background: #e7f3ff;
-            color: #004085;
-            padding: 10px 15px;
-            border-radius: 4px;
-            margin-bottom: 10px;
+        .pagination {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 15px;
+            padding: 10px 0;
+        }
+        .pagination-info {
+            color: #666;
+            font-size: 14px;
+        }
+        .pagination-controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .pagination button {
+            padding: 6px 12px;
             font-size: 14px;
         }
     </style>
@@ -219,6 +230,7 @@
         };
 
         let allData = {};
+        let currentPages = {}; // Track current page for each table
 
         // ============================================================================
         // CONFIGURATION MANAGEMENT
@@ -312,6 +324,9 @@
                 }
 
                 allData[queryKey] = json.data;
+                if (!currentPages[queryKey]) {
+                    currentPages[queryKey] = 1; // Initialize to page 1
+                }
                 updateSection(queryKey, json.data, null);
             } catch (error) {
                 updateSection(queryKey, null, error.message);
@@ -342,7 +357,11 @@
             }
 
             const totalRows = data.length;
-            const displayData = data.slice(0, CONFIG.MAX_ROWS);
+            const currentPage = currentPages[queryKey] || 1;
+            const totalPages = Math.ceil(totalRows / CONFIG.MAX_ROWS);
+            const startIndex = (currentPage - 1) * CONFIG.MAX_ROWS;
+            const endIndex = startIndex + CONFIG.MAX_ROWS;
+            const displayData = data.slice(startIndex, endIndex);
             const keys = Object.keys(data[0]);
             const isUrl = (value) => {
                 if (!value || typeof value !== 'string') return false;
@@ -362,7 +381,7 @@
             const rows = displayData.map((row, rowIndex) => {
                 const cells = keys.map((k, cellIndex) => {
                     const { text, full, isTruncated, isUrl } = formatValue(row[k], CONFIG.MAX_CELL_CHARS);
-                    const cellId = `cell-${queryKey}-${rowIndex}-${cellIndex}`;
+                    const cellId = `cell-${queryKey}-${startIndex + rowIndex}-${cellIndex}`;
                     const className = isTruncated && !isUrl ? 'truncated' : '';
                     
                     if (isUrl) {
@@ -374,13 +393,20 @@
                 return `<tr>${cells}</tr>`;
             }).join('');
 
-            const rowLimitNotice = totalRows > CONFIG.MAX_ROWS 
-                ? `<div class="row-limit-notice">Showing ${CONFIG.MAX_ROWS} of ${totalRows} rows. Export CSV to see all data.</div>`
-                : '';
+            const pagination = totalPages > 1 ? `
+                <div class="pagination">
+                    <div class="pagination-info">
+                        Showing ${startIndex + 1}-${Math.min(endIndex, totalRows)} of ${totalRows} rows (Page ${currentPage} of ${totalPages})
+                    </div>
+                    <div class="pagination-controls">
+                        <button onclick="changePage('${queryKey}', ${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>Previous</button>
+                        <button onclick="changePage('${queryKey}', ${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>Next</button>
+                    </div>
+                </div>
+            ` : '';
 
             return `
-                <button class="export-btn" onclick="exportData('${queryKey}')">Export CSV</button>
-                ${rowLimitNotice}
+                ${pagination}
                 <div class="results">
                     <table>
                         <thead><tr>${headers}</tr></thead>
@@ -388,6 +414,20 @@
                     </table>
                 </div>
             `;
+        }
+
+        // ============================================================================
+        // PAGINATION
+        // ============================================================================
+        function changePage(queryKey, newPage) {
+            const data = allData[queryKey];
+            if (!data) return;
+            
+            const totalPages = Math.ceil(data.length / CONFIG.MAX_ROWS);
+            if (newPage < 1 || newPage > totalPages) return;
+            
+            currentPages[queryKey] = newPage;
+            updateSection(queryKey, data, null);
         }
 
         // ============================================================================
@@ -402,35 +442,6 @@
             cell.classList.remove('truncated');
             cell.classList.add('full-text');
             cell.removeAttribute('onclick');
-        }
-
-        // ============================================================================
-        // EXPORT
-        // ============================================================================
-        function exportData(queryKey) {
-            const data = allData[queryKey];
-            if (!data || data.length === 0) return;
-
-            const keys = Object.keys(data[0]);
-            const formatValue = (value) => {
-                if (value === null || value === undefined) return '';
-                const str = Array.isArray(value) ? value.join(', ') : String(value);
-                if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-                    return `"${str.replace(/"/g, '""')}"`;
-                }
-                return str;
-            };
-
-            const headers = keys.join(',');
-            const rows = data.map(row => keys.map(k => formatValue(row[k])).join(','));
-            const csv = [headers, ...rows].join('\n');
-
-            const blob = new Blob([csv], { type: 'text/csv' });
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = `${queryKey}-${Date.now()}.csv`;
-            a.click();
-            URL.revokeObjectURL(a.href);
         }
 
         // ============================================================================

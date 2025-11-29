@@ -122,6 +122,13 @@
             font-weight: 600;
         }
         tr:hover { background: #f9f9f9; }
+        td a {
+            color: #007AFF;
+            text-decoration: none;
+        }
+        td a:hover {
+            text-decoration: underline;
+        }
         
         .loading {
             text-align: center;
@@ -325,19 +332,31 @@
             }
 
             const keys = Object.keys(data[0]);
+            const isUrl = (value) => {
+                if (!value || typeof value !== 'string') return false;
+                const str = value.trim();
+                return str.startsWith('http://') || str.startsWith('https://');
+            };
+
             const formatValue = (value, maxChars) => {
-                if (value === null || value === undefined) return { text: '', full: '' };
+                if (value === null || value === undefined) return { text: '', full: '', isUrl: false };
                 const fullText = Array.isArray(value) ? value.join(', ') : String(value);
+                const url = isUrl(fullText);
                 const text = fullText.length > maxChars ? fullText.substring(0, maxChars) + '...' : fullText;
-                return { text, full: fullText, isTruncated: fullText.length > maxChars };
+                return { text, full: fullText, isTruncated: fullText.length > maxChars, isUrl: url };
             };
 
             const headers = keys.map(k => `<th>${k.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</th>`).join('');
             const rows = data.map((row, rowIndex) => {
                 const cells = keys.map((k, cellIndex) => {
-                    const { text, full, isTruncated } = formatValue(row[k], CONFIG.MAX_CELL_CHARS);
+                    const { text, full, isTruncated, isUrl } = formatValue(row[k], CONFIG.MAX_CELL_CHARS);
                     const cellId = `cell-${queryKey}-${rowIndex}-${cellIndex}`;
-                    const className = isTruncated ? 'truncated' : '';
+                    const className = isTruncated && !isUrl ? 'truncated' : '';
+                    
+                    if (isUrl) {
+                        return `<td id="${cellId}"><a href="${full.replace(/"/g, '&quot;')}" target="_blank" rel="noopener noreferrer">${text}</a></td>`;
+                    }
+                    
                     return `<td class="${className}" id="${cellId}" title="${full.replace(/"/g, '&quot;')}" onclick="expandCell('${cellId}')">${text}</td>`;
                 }).join('');
                 return `<tr>${cells}</tr>`;
